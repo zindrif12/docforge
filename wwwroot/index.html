@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocForge — the AI document workshop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0E14; --ink:#EDF1F7; --muted:#94A2B3; --faint:#5B6878;
+  --glass:rgba(255,255,255,.055); --line:rgba(255,255,255,.1); --line2:rgba(255,255,255,.17);
+  --ember:#F97316; --gold:#FBBF24; --blue:#38BDF8; --green:#34D399; --violet:#A78BFA; --red:#FB7185;
+  --fd:"Space Grotesk",sans-serif; --fb:"Inter",sans-serif; --fm:"JetBrains Mono",monospace;
+  --grad:linear-gradient(120deg,var(--ember),var(--gold) 55%,var(--blue));
+  --r:22px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--fb);background:var(--bg);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--ember);color:#140A02}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit;font-size:.95rem;color:var(--ink)}
+:focus-visible{outline:2.5px solid var(--gold);outline-offset:2px;border-radius:8px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:6px}
+
+/* ============ forge glow background ============ */
+.aurora{position:fixed;inset:-20%;z-index:0;pointer-events:none;filter:blur(95px);opacity:.5}
+.blob{position:absolute;border-radius:50%}
+.b1{width:50vw;height:50vw;background:radial-gradient(circle,rgba(249,115,22,.5),transparent 65%);top:-14%;left:-10%;animation:d1 28s ease-in-out infinite alternate}
+.b2{width:44vw;height:44vw;background:radial-gradient(circle,rgba(56,189,248,.4),transparent 65%);bottom:-16%;right:-8%;animation:d2 34s ease-in-out infinite alternate}
+.b3{width:32vw;height:32vw;background:radial-gradient(circle,rgba(251,191,36,.34),transparent 65%);top:38%;left:58%;animation:d3 24s ease-in-out infinite alternate}
+@keyframes d1{to{transform:translate(11vw,9vh) scale(1.14)}}
+@keyframes d2{to{transform:translate(-9vw,-11vh) scale(1.18)}}
+@keyframes d3{to{transform:translate(-13vw,7vh) scale(.92)}}
+.grid-dots{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.45;
+  background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1.4px);background-size:34px 34px;
+  mask-image:radial-gradient(ellipse 90% 70% at 50% 15%,#000 30%,transparent 75%)}
+
+nav{position:sticky;top:0;z-index:40;background:rgba(10,14,20,.7);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.nav-in{max-width:1240px;margin:0 auto;padding:.85rem 1.4rem;display:flex;align-items:center;gap:.9rem}
+.brand{display:flex;align-items:center;gap:.75rem;margin-right:auto}
+.logo{width:42px;height:42px;border-radius:13px;background:var(--grad);background-size:220% 220%;animation:gshift 7s ease infinite;display:grid;place-items:center;font-size:1.25rem;box-shadow:0 0 26px rgba(249,115,22,.45)}
+@keyframes gshift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.brand b{font-family:var(--fd);font-weight:700;font-size:1.3rem}
+.brand small{display:block;font-family:var(--fm);font-size:.55rem;color:var(--muted);letter-spacing:.17em;text-transform:uppercase}
+.pill{font-family:var(--fm);font-size:.62rem;font-weight:700;letter-spacing:.08em;color:var(--gold);border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.08);border-radius:999px;padding:.3rem .8rem}
+
+main{max-width:1240px;margin:0 auto;padding:2.2rem 1.4rem 4.5rem;position:relative;z-index:1}
+.hero{text-align:center;margin-bottom:1.9rem}
+.hero h1{font-family:var(--fd);font-weight:700;font-size:2.8rem;letter-spacing:-.02em;animation:rise .7s cubic-bezier(.22,.9,.3,1) both}
+.hero h1 em{font-style:normal;background:var(--grad);background-size:220% 220%;animation:gshift 5s ease infinite;-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{color:var(--muted);max-width:640px;margin:.5rem auto 0;animation:rise .7s .08s both}
+@keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+
+/* ============ module tabs ============ */
+.mods{display:grid;grid-template-columns:repeat(4,1fr);gap:.9rem;margin-bottom:1.6rem}
+@media(max-width:840px){.mods{grid-template-columns:repeat(2,1fr)}}
+.mod{--mc:#F97316;--mglow:rgba(249,115,22,.3);background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:20px;padding:1rem 1.1rem;text-align:left;color:var(--ink);transition:all .22s cubic-bezier(.22,.9,.35,1);position:relative;overflow:hidden;animation:rise .6s both}
+.mod::after{content:"";position:absolute;top:0;bottom:0;width:55%;left:-70%;background:linear-gradient(115deg,transparent,rgba(255,255,255,.08),transparent);transform:skewX(-18deg);transition:left .6s}
+.mod:hover::after{left:130%}
+.mod:hover{transform:translateY(-3px);border-color:var(--line2);box-shadow:0 12px 34px rgba(0,0,0,.45),0 0 24px var(--mglow)}
+.mod .ic{font-size:1.5rem}
+.mod b{display:block;font-family:var(--fd);font-size:1.05rem;margin-top:.35rem}
+.mod span{font-size:.74rem;color:var(--muted)}
+.mod.on{border-color:var(--mc);box-shadow:0 0 0 1.5px var(--mc),0 12px 36px rgba(0,0,0,.5),0 0 30px var(--mglow)}
+.mod.on::before{content:"";position:absolute;top:0;left:0;right:0;height:3.5px;background:var(--mc)}
+
+/* ============ panels ============ */
+.panel{display:none;animation:rise .45s both}
+.panel.on{display:block}
+.card{background:linear-gradient(150deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(15px);padding:1.4rem 1.5rem;position:relative;overflow:hidden}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.lab{display:block;font-family:var(--fm);font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:0 0 .5rem}
+textarea.inp{width:100%;border:1px solid var(--line);border-radius:15px;padding:.85rem 1rem;background:rgba(0,0,0,.32);min-height:170px;resize:vertical;transition:all .2s;font-size:.92rem;line-height:1.55}
+textarea.inp:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(251,191,36,.14)}
+.drop{border:2px dashed var(--line2);border-radius:18px;padding:1.9rem 1rem;text-align:center;cursor:pointer;transition:all .25s}
+.drop:hover,.drop.over{border-color:var(--ember);background:rgba(249,115,22,.06);box-shadow:inset 0 0 40px rgba(249,115,22,.07)}
+.drop .ic{font-size:2rem;display:inline-block;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+.drop b{display:block;margin:.4rem 0 .1rem;font-size:.95rem}
+.drop span{font-family:var(--fm);font-size:.64rem;color:var(--faint);letter-spacing:.05em}
+.chips{display:flex;flex-wrap:wrap;gap:.45rem;margin-top:.8rem}
+.chip{font-family:var(--fm);font-size:.68rem;font-weight:700;padding:.32rem .7rem;border-radius:9px;border:1px solid;animation:pop .4s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+.chip.field{color:var(--blue);border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.08)}
+.chip.miss{color:var(--gold);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.08)}
+.chip.okc{color:var(--green);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
+.ex{border:1px solid var(--line);background:var(--glass);border-radius:999px;padding:.4rem .9rem;font-size:.78rem;color:var(--muted);transition:all .2s}
+.ex:hover{color:var(--gold);border-color:var(--gold);box-shadow:0 0 14px rgba(251,191,36,.2);transform:translateY(-1px)}
+.btn{position:relative;overflow:hidden;background:var(--grad);background-size:220% 220%;animation:gshift 6s ease infinite;color:#140A02;border:none;border-radius:15px;padding:.9rem 1.6rem;font-weight:800;font-size:.95rem;box-shadow:0 6px 26px rgba(249,115,22,.4);transition:transform .15s,box-shadow .25s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 10px 36px rgba(251,191,36,.5)}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.55;transform:none;cursor:wait}
+.btn-q{border:1px solid var(--line);background:transparent;border-radius:13px;padding:.55rem 1rem;font-weight:700;font-size:.8rem;color:var(--muted);transition:all .2s}
+.btn-q:hover{color:var(--ink);border-color:var(--line2)}
+.forging{display:none;align-items:center;gap:.8rem;margin-top:1rem;font-size:.87rem;color:var(--gold);font-weight:600}
+.forging.on{display:flex}
+.spark{width:22px;height:22px;border-radius:50%;border:3px solid rgba(251,191,36,.25);border-top-color:var(--gold);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err{color:var(--red);font-size:.85rem;margin-top:.7rem;font-weight:600}
+
+/* ============ results ============ */
+.result{display:none;margin-top:1.1rem;border:1px solid rgba(52,211,153,.3);background:rgba(52,211,153,.05);border-radius:18px;padding:1.1rem 1.2rem;animation:spring .5s cubic-bezier(.34,1.4,.5,1) both}
+.result.on{display:block}
+@keyframes spring{from{transform:translateY(26px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.result h3{font-family:var(--fd);font-size:1.05rem;display:flex;align-items:center;gap:.5rem}
+.result .sum{font-size:.85rem;color:var(--muted);margin:.25rem 0 .6rem}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:.5rem .9rem;margin:.6rem 0}
+@media(max-width:640px){.kv{grid-template-columns:1fr}}
+.kv div{background:rgba(0,0,0,.3);border:1px solid var(--line);border-radius:11px;padding:.5rem .75rem}
+.kv small{display:block;font-family:var(--fm);font-size:.56rem;letter-spacing:.12em;color:var(--faint)}
+.kv b{font-size:.86rem;font-weight:600}
+.confwrap{margin:.6rem 0}
+.confbar{height:9px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+.confbar i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--blue));transition:width .9s cubic-bezier(.22,.9,.35,1);box-shadow:0 0 12px rgba(52,211,153,.5)}
+.dl{display:inline-flex;align-items:center;gap:.55rem;background:linear-gradient(120deg,var(--green),var(--blue));background-size:200% 200%;animation:gshift 6s ease infinite;color:#04140D;border:none;border-radius:13px;padding:.75rem 1.4rem;font-weight:800;font-size:.9rem;box-shadow:0 6px 24px rgba(52,211,153,.4);transition:transform .15s;position:relative;overflow:hidden;margin-top:.5rem;text-decoration:none}
+.dl:hover{transform:translateY(-2px)}
+.tpl-item{display:flex;align-items:center;gap:.7rem;padding:.65rem .8rem;border:1px solid var(--line);border-radius:13px;margin-top:.5rem;transition:all .2s;cursor:pointer;background:rgba(0,0,0,.2)}
+.tpl-item:hover{border-color:var(--line2);transform:translateX(3px)}
+.tpl-item.sel{border-color:var(--ember);box-shadow:0 0 0 1.5px var(--ember),0 0 18px rgba(249,115,22,.25)}
+.tpl-item .k{font-family:var(--fm);font-size:.6rem;font-weight:700;padding:.2rem .5rem;border-radius:7px;color:var(--blue);border:1px solid rgba(56,189,248,.4);background:rgba(56,189,248,.08);text-transform:uppercase}
+.tpl-item b{font-size:.85rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpl-item small{font-family:var(--fm);font-size:.62rem;color:var(--faint)}
+.tpl-item .x{border:none;background:none;color:var(--faint);font-size:.95rem;padding:.1rem .3rem;transition:all .2s}
+.tpl-item .x:hover{color:var(--red);transform:rotate(90deg)}
+.swatches{display:flex;gap:.5rem;margin:.6rem 0 .2rem}
+.sw{width:34px;height:34px;border-radius:11px;border:2px solid transparent;cursor:pointer;transition:all .18s}
+.sw:hover{transform:scale(1.14)}
+.sw.on{border-color:#fff;box-shadow:0 0 16px rgba(255,255,255,.3)}
+
+/* ============ history ============ */
+.hist{margin-top:2rem}
+.hist h2{font-family:var(--fd);font-size:1.25rem;margin-bottom:.7rem}
+.hrow{display:flex;align-items:center;gap:.8rem;padding:.6rem .9rem;border:1px solid var(--line);border-radius:13px;margin-top:.45rem;background:var(--glass);animation:rise .5s both}
+.hrow .m{font-family:var(--fm);font-size:.6rem;font-weight:700;padding:.22rem .6rem;border-radius:8px;text-transform:uppercase;border:1px solid}
+.m.fill{color:var(--ember);border-color:rgba(249,115,22,.4);background:rgba(249,115,22,.08)}
+.m.sheet{color:var(--green);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.08)}
+.m.doc{color:var(--blue);border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.08)}
+.m.deck{color:var(--violet);border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.08)}
+.hrow b{font-size:.86rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hrow small{font-family:var(--fm);font-size:.64rem;color:var(--faint)}
+
+#toast{position:fixed;bottom:1.7rem;left:50%;transform:translateX(-50%) translateY(90px);background:linear-gradient(150deg,#1A2230,#101722);border:1px solid var(--line2);border-radius:14px;padding:.8rem 1.4rem;font-size:.88rem;font-weight:600;box-shadow:0 16px 50px rgba(0,0,0,.5),0 0 24px rgba(251,191,36,.15);z-index:90;transition:transform .4s cubic-bezier(.34,1.4,.5,1);max-width:92vw}
+#toast.on{transform:translateX(-50%) translateY(0)}
+.ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.5);transform:scale(0);animation:rip .55s ease-out;pointer-events:none}
+@keyframes rip{to{transform:scale(3.4);opacity:0}}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<div class="grid-dots"></div>
+
+<nav><div class="nav-in">
+  <div class="brand"><div class="logo">⚒</div><div><b>DocForge</b><small>The AI document workshop</small></div></div>
+  <span class="pill" id="healthPill">CHECKING…</span>
+</div></nav>
+
+<main>
+  <div class="hero">
+    <h1>Four documents. <em>One forge.</em></h1>
+    <p>Fill your own templates from messy text, or forge spreadsheets, documents and decks from a plain-English brief — real Office files, live formulas, your branding.</p>
+  </div>
+
+  <div class="mods">
+    <button class="mod on" data-m="fill" style="--mc:var(--ember);--mglow:rgba(249,115,22,.3);animation-delay:.05s"><span class="ic">📋</span><b>Fill a template</b><span>Your .docx/.xlsx + messy text → finished document</span></button>
+    <button class="mod" data-m="sheet" style="--mc:var(--green);--mglow:rgba(52,211,153,.3);animation-delay:.12s"><span class="ic">📊</span><b>Forge a spreadsheet</b><span>Brief → .xlsx with live formulas</span></button>
+    <button class="mod" data-m="doc" style="--mc:var(--blue);--mglow:rgba(56,189,248,.3);animation-delay:.19s"><span class="ic">📄</span><b>Forge a document</b><span>Brief → structured .docx</span></button>
+    <button class="mod" data-m="deck" style="--mc:var(--violet);--mglow:rgba(167,139,250,.3);animation-delay:.26s"><span class="ic">📽️</span><b>Forge a deck</b><span>Notes → themed .pptx</span></button>
+  </div>
+
+  <!-- ============ FILL ============ -->
+  <div class="panel on" id="p-fill">
+    <div class="split">
+      <div class="card">
+        <label class="lab">1 — Your template</label>
+        <div class="drop" id="tplDrop">
+          <span class="ic">📎</span>
+          <b>Drop a .docx or .xlsx template — or tap to choose</b>
+          <span>USE {{PLACEHOLDERS}} LIKE {{client_name}} · UNDER 2.5 MB</span>
+          <input type="file" id="tplFile" accept=".docx,.xlsx" hidden>
+        </div>
+        <div class="chips" id="tplFields"></div>
+        <div style="margin-top:1rem">
+          <label class="lab">Template library</label>
+          <div id="tplList"><small style="color:var(--faint);font-size:.8rem">No templates saved yet.</small></div>
+        </div>
+      </div>
+      <div class="card">
+        <label class="lab">2 — Paste the messy source</label>
+        <textarea class="inp" id="srcText" placeholder="Paste the email thread, meeting notes, CRM blob — anything. e.g. 'Confirmed with HR: hiring Nadeesha Perera as Senior Software Engineer, 480k LKR, starts Sept 1, reports to R. Fernando…'"></textarea>
+        <div style="display:flex;gap:.7rem;align-items:center;margin-top:1rem;flex-wrap:wrap">
+          <button class="btn" id="forgeFill">⚒ Forge the document</button>
+          <div class="forging" id="fillForging"><span class="spark"></span> Reading source · mapping fields…</div>
+        </div>
+        <p class="err" id="fillErr"></p>
+        <div class="result" id="fillResult">
+          <h3>✅ Forged: <span id="fillName"></span></h3>
+          <div class="confwrap"><span style="font-family:var(--fm);font-size:.62rem;color:var(--muted)">AI CONFIDENCE <b id="fillConfLbl"></b></span>
+            <div class="confbar"><i id="fillConf" style="width:0"></i></div></div>
+          <div class="kv" id="fillKv"></div>
+          <div class="chips" id="fillMissing"></div>
+          <a class="dl" id="fillDl">⬇ Download filled document</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SHEET ============ -->
+  <div class="panel" id="p-sheet">
+    <div class="card">
+      <label class="lab">Describe the workbook — formulas will be live, not pasted values</label>
+      <textarea class="inp" id="promptSheet" placeholder="e.g. A 12-month cash-flow model for a small bakery: revenue growing 10% monthly from LKR 120,000, costs at 65% of revenue, with an assumptions sheet and a totals row."></textarea>
+      <div class="chips" style="margin-top:.7rem">
+        <button class="ex" data-t="promptSheet" data-v="12-month cash-flow model for a bakery, 10% monthly growth, costs 65% of revenue, assumptions sheet, totals row">Bakery cash flow</button>
+        <button class="ex" data-t="promptSheet" data-v="Project budget tracker: 15 tasks across 4 phases with estimate, actual, variance formula, and a phase summary sheet">Project budget</button>
+        <button class="ex" data-t="promptSheet" data-v="Sales commission calculator: 8 reps, monthly sales, 5% base commission, 8% above target of 500000, quarterly totals">Commission calc</button>
+      </div>
+      <div style="display:flex;gap:.7rem;align-items:center;margin-top:1rem;flex-wrap:wrap">
+        <button class="btn" id="forgeSheet">⚒ Forge the spreadsheet</button>
+        <div class="forging" id="sheetForging"><span class="spark"></span> Designing sheets · writing formulas…</div>
+      </div>
+      <p class="err" id="sheetErr"></p>
+      <div class="result" id="sheetResult">
+        <h3>✅ Forged: <span id="sheetName"></span></h3>
+        <p class="sum" id="sheetSum"></p>
+        <div class="chips" id="sheetSheets"></div>
+        <a class="dl" id="sheetDl">⬇ Download .xlsx</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DOC ============ -->
+  <div class="panel" id="p-doc">
+    <div class="card">
+      <label class="lab">Describe the document</label>
+      <textarea class="inp" id="promptDoc" placeholder="e.g. A project proposal for migrating Meridian Ltd from legacy on-prem CRM to a cloud platform: background, objectives, 3-phase approach, commercials table, risks."></textarea>
+      <div class="chips" style="margin-top:.7rem">
+        <button class="ex" data-t="promptDoc" data-v="Project proposal for a CRM migration: background, objectives, three-phase approach, commercials table, risks">Proposal</button>
+        <button class="ex" data-t="promptDoc" data-v="Statement of work for a 6-sprint mobile app build: scope, deliverables, timeline table, acceptance criteria, payment schedule">SoW</button>
+        <button class="ex" data-t="promptDoc" data-v="Company policy for remote work: eligibility, expectations, equipment, security, review cadence">HR policy</button>
+      </div>
+      <div style="display:flex;gap:.7rem;align-items:center;margin-top:1rem;flex-wrap:wrap">
+        <button class="btn" id="forgeDoc">⚒ Forge the document</button>
+        <div class="forging" id="docForging"><span class="spark"></span> Structuring sections · writing prose…</div>
+      </div>
+      <p class="err" id="docErr"></p>
+      <div class="result" id="docResult">
+        <h3>✅ Forged: <span id="docName"></span></h3>
+        <p class="sum" id="docSum"></p>
+        <a class="dl" id="docDl">⬇ Download .docx</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DECK ============ -->
+  <div class="panel" id="p-deck">
+    <div class="card">
+      <label class="lab">Paste notes or describe the deck</label>
+      <textarea class="inp" id="promptDeck" placeholder="e.g. Kick-off deck for the Meridian project: why now, goals, 3-phase plan, team, timeline, next steps. Audience: client executives."></textarea>
+      <label class="lab" style="margin-top:.9rem">Accent colour</label>
+      <div class="swatches" id="swatches">
+        <div class="sw on" data-c="1F6E54" style="background:#1F6E54"></div>
+        <div class="sw" data-c="F97316" style="background:#F97316"></div>
+        <div class="sw" data-c="2563EB" style="background:#2563EB"></div>
+        <div class="sw" data-c="7C3AED" style="background:#7C3AED"></div>
+        <div class="sw" data-c="BE123C" style="background:#BE123C"></div>
+        <div class="sw" data-c="0F172A" style="background:#0F172A"></div>
+      </div>
+      <div class="chips" style="margin-top:.5rem">
+        <button class="ex" data-t="promptDeck" data-v="Kick-off deck for a client project: why now, goals, three-phase plan, team, timeline, next steps">Kick-off</button>
+        <button class="ex" data-t="promptDeck" data-v="Quarterly business review: highlights, numbers vs target, wins, challenges, plan for next quarter">QBR</button>
+        <button class="ex" data-t="promptDeck" data-v="Product pitch for an AI expiry tracker app: problem, solution, demo flow, market, pricing, ask">Pitch</button>
+      </div>
+      <div style="display:flex;gap:.7rem;align-items:center;margin-top:1rem;flex-wrap:wrap">
+        <button class="btn" id="forgeDeck">⚒ Forge the deck</button>
+        <div class="forging" id="deckForging"><span class="spark"></span> Outlining slides · applying theme…</div>
+      </div>
+      <p class="err" id="deckErr"></p>
+      <div class="result" id="deckResult">
+        <h3>✅ Forged: <span id="deckName"></span></h3>
+        <p class="sum" id="deckSum"></p>
+        <div class="chips" id="deckSlides"></div>
+        <a class="dl" id="deckDl">⬇ Download .pptx</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="hist">
+    <h2>Recent forges</h2>
+    <div id="histList"><small style="color:var(--faint)">Nothing forged yet — the anvil is cold.</small></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ripple */
+document.addEventListener("click", e => {
+  const b = e.target.closest(".btn,.mod,.ex,.dl,.btn-q");
+  if (!b) return;
+  const r = b.getBoundingClientRect(), s = document.createElement("span");
+  s.className = "ripple";
+  const size = Math.max(r.width, r.height);
+  s.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-r.left-size/2}px;top:${e.clientY-r.top-size/2}px`;
+  b.appendChild(s); setTimeout(()=>s.remove(), 600);
+});
+
+let toastT;
+function toast(m){ $("toast").textContent = m; $("toast").classList.add("on"); clearTimeout(toastT); toastT = setTimeout(()=>$("toast").classList.remove("on"), 2800); }
+
+/* module tabs */
+document.querySelectorAll(".mod").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".mod").forEach(x => x.classList.toggle("on", x===b));
+  document.querySelectorAll(".panel").forEach(p => p.classList.remove("on"));
+  $("p-"+b.dataset.m).classList.add("on");
+});
+/* example chips */
+document.querySelectorAll(".ex").forEach(b => b.onclick = () => { $(b.dataset.t).value = b.dataset.v; $(b.dataset.t).focus(); });
+
+/* health */
+fetch("/api/health").then(r=>r.json()).then(h => {
+  $("healthPill").textContent = h.provider === "gemini" ? "AI READY" : h.provider === "mock" ? "MOCK MODE" : "AI NOT CONFIGURED";
+});
+
+/* download helper */
+function wireDownload(aId, b64, filename){
+  const a = $(aId);
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], {type:"application/octet-stream"});
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+}
+async function post(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body)});
+  const d = await r.json().catch(()=>({error:"Bad response"}));
+  if (!r.ok) throw new Error(d.error || "Something failed");
+  return d;
+}
+function busy(btn, forgingId, on){
+  $(forgingId).classList.toggle("on", on);
+  btn.disabled = on;
+}
+
+/* ============ FILL ============ */
+let selectedTpl = null;
+const tplDrop = $("tplDrop");
+tplDrop.onclick = () => $("tplFile").click();
+tplDrop.ondragover = e => { e.preventDefault(); tplDrop.classList.add("over"); };
+tplDrop.ondragleave = () => tplDrop.classList.remove("over");
+tplDrop.ondrop = e => { e.preventDefault(); tplDrop.classList.remove("over"); if (e.dataTransfer.files[0]) uploadTpl(e.dataTransfer.files[0]); };
+$("tplFile").onchange = e => { if (e.target.files[0]) uploadTpl(e.target.files[0]); e.target.value = ""; };
+
+async function uploadTpl(file){
+  $("fillErr").textContent = "";
+  if (file.size > 2_500_000){ $("fillErr").textContent = "Template too large — keep under 2.5 MB."; return; }
+  const b64 = await new Promise((res,rej)=>{ const r = new FileReader(); r.onload = ()=>res(r.result.split(",")[1]); r.onerror = ()=>rej(new Error("read failed")); r.readAsDataURL(file); });
+  try{
+    const d = await post("/api/template/analyze", {filename: file.name, fileBase64: b64});
+    toast(`Template saved — ${d.placeholders.length} fields found ✓`);
+    await loadTemplates(d.id);
+  }catch(e){ $("fillErr").textContent = e.message; }
+}
+async function loadTemplates(selectId){
+  const list = await fetch("/api/templates").then(r=>r.json());
+  const el = $("tplList");
+  if (!list.length){ el.innerHTML = '<small style="color:var(--faint);font-size:.8rem">No templates saved yet.</small>'; selectedTpl = null; $("tplFields").innerHTML = ""; return; }
+  el.innerHTML = list.map(t => `
+    <div class="tpl-item ${t.id===selectId?"sel":""}" data-id="${t.id}" data-ph='${esc(JSON.stringify(t.placeholders))}'>
+      <span class="k">${t.kind}</span><b>${esc(t.name)}</b><small>${t.placeholders.length} fields</small>
+      <button class="x" data-del="${t.id}" title="Delete">✕</button>
+    </div>`).join("");
+  el.querySelectorAll(".tpl-item").forEach(it => it.onclick = e => {
+    if (e.target.dataset.del) return;
+    selectTpl(it);
+  });
+  el.querySelectorAll(".x").forEach(x => x.onclick = async e => {
+    e.stopPropagation();
+    await fetch("/api/templates/"+x.dataset.del, {method:"DELETE"});
+    toast("Template removed.");
+    loadTemplates(selectedTpl);
+  });
+  const pre = el.querySelector(selectId ? `[data-id="${selectId}"]` : ".tpl-item");
+  if (pre) selectTpl(pre);
+}
+function selectTpl(it){
+  document.querySelectorAll(".tpl-item").forEach(x => x.classList.toggle("sel", x===it));
+  selectedTpl = it.dataset.id;
+  const ph = JSON.parse(it.dataset.ph);
+  $("tplFields").innerHTML = ph.map((p,i) => `<span class="chip field" style="animation-delay:${i*0.05}s">{{${esc(p)}}}</span>`).join("");
+}
+$("forgeFill").onclick = async () => {
+  $("fillErr").textContent = ""; $("fillResult").classList.remove("on");
+  if (!selectedTpl){ $("fillErr").textContent = "Upload or select a template first."; return; }
+  const src = $("srcText").value.trim();
+  if (src.length < 10){ $("fillErr").textContent = "Paste a bit more source text."; return; }
+  busy($("forgeFill"), "fillForging", true);
+  try{
+    const d = await post("/api/template/fill", {templateId: selectedTpl, sourceText: src});
+    $("fillName").textContent = d.filename;
+    $("fillConfLbl").textContent = d.confidence + "%";
+    requestAnimationFrame(()=>requestAnimationFrame(()=>$("fillConf").style.width = d.confidence + "%"));
+    $("fillKv").innerHTML = Object.entries(d.filled).map(([k,v]) => `<div><small>${esc(k)}</small><b>${esc(v)}</b></div>`).join("");
+    $("fillMissing").innerHTML = d.missing.length
+      ? d.missing.map(m => `<span class="chip miss">⚠ ${esc(m)} — not found in source</span>`).join("")
+      : `<span class="chip okc">✓ every field was found</span>`;
+    wireDownload("fillDl", d.fileBase64, d.filename);
+    $("fillResult").classList.add("on");
+    loadHistory();
+  }catch(e){ $("fillErr").textContent = e.message; }
+  finally{ busy($("forgeFill"), "fillForging", false); }
+};
+
+/* ============ generators ============ */
+function wireGen(btnId, forgingId, errId, resultId, url, bodyFn, onDone){
+  $(btnId).onclick = async () => {
+    $(errId).textContent = ""; $(resultId).classList.remove("on");
+    const body = bodyFn();
+    if ((body.prompt||"").length < 8){ $(errId).textContent = "Describe it in a sentence or two first."; return; }
+    busy($(btnId), forgingId, true);
+    try{
+      const d = await post(url, body);
+      onDone(d);
+      $(resultId).classList.add("on");
+      loadHistory();
+    }catch(e){ $(errId).textContent = e.message; }
+    finally{ busy($(btnId), forgingId, false); }
+  };
+}
+wireGen("forgeSheet","sheetForging","sheetErr","sheetResult","/api/generate/sheet",
+  () => ({prompt: $("promptSheet").value.trim()}),
+  d => { $("sheetName").textContent = d.filename; $("sheetSum").textContent = d.summary;
+         $("sheetSheets").innerHTML = d.sheets.map((s,i)=>`<span class="chip okc" style="animation-delay:${i*0.06}s">📄 ${esc(s)}</span>`).join("");
+         wireDownload("sheetDl", d.fileBase64, d.filename); });
+wireGen("forgeDoc","docForging","docErr","docResult","/api/generate/doc",
+  () => ({prompt: $("promptDoc").value.trim()}),
+  d => { $("docName").textContent = d.filename; $("docSum").textContent = d.summary;
+         wireDownload("docDl", d.fileBase64, d.filename); });
+let accent = "1F6E54";
+document.querySelectorAll(".sw").forEach(s => s.onclick = () => {
+  document.querySelectorAll(".sw").forEach(x => x.classList.toggle("on", x===s));
+  accent = s.dataset.c;
+});
+wireGen("forgeDeck","deckForging","deckErr","deckResult","/api/generate/deck",
+  () => ({prompt: $("promptDeck").value.trim(), accent}),
+  d => { $("deckName").textContent = d.filename; $("deckSum").textContent = d.summary;
+         $("deckSlides").innerHTML = d.slides.map((s,i)=>`<span class="chip okc" style="animation-delay:${i*0.06}s">▸ ${esc(s)}</span>`).join("");
+         wireDownload("deckDl", d.fileBase64, d.filename); });
+
+/* ============ history ============ */
+async function loadHistory(){
+  const h = await fetch("/api/history").then(r=>r.json()).catch(()=>[]);
+  const el = $("histList");
+  if (!h.length){ el.innerHTML = '<small style="color:var(--faint)">Nothing forged yet — the anvil is cold.</small>'; return; }
+  el.innerHTML = h.slice(0,12).map((x,i) => `
+    <div class="hrow" style="animation-delay:${i*0.05}s">
+      <span class="m ${esc(x.module)}">${esc(x.module)}</span>
+      <b>${esc(x.title)}</b>
+      <small>${new Date(x.createdAt).toLocaleString()}</small>
+    </div>`).join("");
+}
+
+loadTemplates();
+loadHistory();
+</script>
+</body>
+</html>
