@@ -32,7 +32,7 @@ var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
 var buckets = new ConcurrentDictionary<string, List<DateTime>>();
 bool RateLimited(HttpContext ctx, int perMinute = 10)
 {
-    var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "?";
+    var ip = (ctx.Connection.RemoteIpAddress?.ToString() ?? "?") + ":" + ctx.Request.Path;
     var now = DateTime.UtcNow;
     var list = buckets.GetOrAdd(ip, _ => new());
     lock (list)
@@ -97,10 +97,11 @@ async Task Record(string module, string title, JsonObject meta)
 // ============================== endpoints ==============================
 app.MapGet("/api/health", () => Results.Json(new
 {
-    ok = true, app = "docforge",
+    ok = true, app = "docforge", version = 2,
     provider = mockAi ? "mock" : (geminiKey is null ? "none" : "gemini"),
     store = store is SupabaseStore ? "supabase" : "file",
-    modules = new[] { "fill", "sheet", "doc", "deck" }
+    modules = new[] { "fill", "sheet", "doc", "deck", "batch" },
+    engine = new[] { "loops", "conditionals", "filters", "verification" }
 }));
 
 // -------- template analyze + save --------
@@ -117,21 +118,25 @@ app.MapPost("/api/template/analyze", async (HttpContext ctx) =>
     var kind = name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ? "xlsx"
              : name.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) ? "docx" : null;
     if (kind is null) return Err(400, "Only .docx and .xlsx templates are supported in v1.");
-    List<string> placeholders;
-    try { placeholders = Ooxml.FindPlaceholders(bytes, kind); }
+    JsonObject schema;
+    try { schema = Tpl.ExtractSchema(bytes, kind); }
+    catch (AppError e) { return Err(e.Code, e.Message); }
     catch { return Err(400, "That file couldn't be opened as a valid Office document."); }
-    if (placeholders.Count == 0)
-        return Err(422, "No {{placeholders}} found. Add fields like {{client_name}} to the template and re-upload.");
+    var scalars = schema["scalars"]!.AsArray().Select(p => p!.GetValue<string>()).ToList();
+    var nFields = scalars.Count + schema["collections"]!.AsArray().Count + schema["conditionals"]!.AsArray().Count;
+    if (nFields == 0)
+        return Err(422, "No template fields found. Add {{client_name}}, {{#each items}}…{{/each}} or {{#if flag}}…{{/if}} and re-upload.");
     var id = NewId();
     var doc = new JsonObject
     {
         ["id"] = id, ["name"] = name, ["kind"] = kind,
-        ["placeholders"] = new JsonArray(placeholders.Select(p => (JsonNode)p!).ToArray()),
+        ["placeholders"] = new JsonArray(scalars.Select(p => (JsonNode)p!).ToArray()),
+        ["schema"] = schema.DeepClone(),
         ["createdAt"] = DateTime.UtcNow.ToString("o"), ["fileBase64"] = b64
     };
     try { await store.Upsert("df_templates", id, doc); }
     catch (Exception ex) { return Err(502, $"storage error — check Supabase setup (df_templates table + env vars): {ex.Message}"); }
-    return Results.Json(new { id, name, kind, placeholders });
+    return Results.Json(new { id, name, kind, placeholders = scalars, schema });
 });
 
 app.MapGet("/api/templates", async () =>
@@ -142,6 +147,7 @@ app.MapGet("/api/templates", async () =>
         id = t["id"]!.GetValue<string>(), name = t["name"]!.GetValue<string>(),
         kind = t["kind"]!.GetValue<string>(),
         placeholders = t["placeholders"]!.AsArray().Select(p => p!.GetValue<string>()).ToArray(),
+        schema = t["schema"]?.DeepClone(),
         createdAt = t["createdAt"]!.GetValue<string>()
     }).OrderByDescending(t => t.createdAt).ToArray();
     return Results.Json(list);
@@ -164,47 +170,139 @@ app.MapPost("/api/template/fill", async (HttpContext ctx) =>
     var tpl = await store.Get("df_templates", tid);
     if (tpl is null) return Err(404, "Template not found — upload it again.");
     var kind = tpl["kind"]!.GetValue<string>();
-    var placeholders = tpl["placeholders"]!.AsArray().Select(p => p!.GetValue<string>()).ToList();
+    var schema = tpl["schema"]?.AsObject() ?? new JsonObject
+    {
+        ["scalars"] = tpl["placeholders"]!.DeepClone(),
+        ["collections"] = new JsonArray(), ["conditionals"] = new JsonArray()
+    };
 
     JsonNode mapped;
     try
     {
         mapped = await AskJson(
             """
-            You fill document templates. Given a list of placeholder field names and a source text
-            (emails, notes, CRM data), produce values for each field FROM THE SOURCE ONLY.
-            Reply with ONLY JSON: {"values": {"field": "value", ...}, "confidence": 0-100, "missing": ["field", ...]}
-            Rules: never invent facts; a field not clearly present in the source goes in "missing" (and NOT in values);
-            format dates like "1 September 2026"; format money with its currency symbol/code as given;
-            expand obvious shorthand; confidence reflects overall mapping certainty.
+            You fill document templates. You receive a SCHEMA (scalar fields, collections of repeating
+            items with their fields, and boolean conditionals) plus a messy SOURCE TEXT.
+            Reply with ONLY JSON:
+            {"payload": {"scalars": {"field":"value"}, "collections": {"name":[{"field":"value"},...]},
+                         "conditionals": {"flag": true|false}},
+             "evidence": {"field": "short verbatim quote from the source that supports the value"},
+             "confidence": 0-100, "missing": ["field", ...]}
+            Rules: values come FROM THE SOURCE ONLY — never invent; a scalar not clearly present goes in
+            "missing" and NOT in payload; collections get one object per real item in the source, in order;
+            conditionals default false unless the source clearly indicates true; keep raw numbers unformatted
+            (filters in the template handle formatting); dates as YYYY-MM-DD; evidence keys use the scalar
+            name or collection[index].field form and quote the source verbatim (max 12 words).
             """,
-            $"PLACEHOLDER FIELDS:\n{string.Join("\n", placeholders)}\n\nSOURCE TEXT:\n{source}",
+            $"SCHEMA:\n{schema.ToJsonString()}\n\nSOURCE TEXT:\n{source}",
             "fill");
     }
     catch (AppError e) { return Err(e.Code, e.Message); }
 
-    var values = new Dictionary<string, string>();
-    foreach (var kv in mapped["values"]?.AsObject() ?? new JsonObject())
-        if (placeholders.Contains(kv.Key) && kv.Value is not null)
-            values[kv.Key] = kv.Value.GetValue<string>();
-    var missing = placeholders.Where(p => !values.ContainsKey(p)).ToArray();
+    var payload = mapped["payload"]?.AsObject() ?? new JsonObject();
+    payload["scalars"] ??= new JsonObject(); payload["collections"] ??= new JsonObject(); payload["conditionals"] ??= new JsonObject();
+    var missing = mapped["missing"]?.AsArray() ?? new JsonArray();
+    var evidence = mapped["evidence"]?.AsObject() ?? new JsonObject();
 
     byte[] outBytes;
-    try { outBytes = Ooxml.FillTemplate(Convert.FromBase64String(tpl["fileBase64"]!.GetValue<string>()), kind, values); }
+    try
+    {
+        var raw = Convert.FromBase64String(tpl["fileBase64"]!.GetValue<string>());
+        outBytes = kind == "docx" ? Tpl.RenderDocx(raw, payload) : Tpl.RenderXlsx(raw, payload);
+    }
+    catch (AppError e) { return Err(e.Code, e.Message); }
     catch (Exception ex) { return Err(500, "Filling failed: " + ex.Message); }
 
+    var report = Tpl.Verify(payload, evidence, source, missing);
+    int nVerified = report.Count(r => r!["status"]!.GetValue<string>() == "verified");
     var outName = Path.GetFileNameWithoutExtension(tpl["name"]!.GetValue<string>()) + "-filled." + kind;
-    // privacy: history stores field NAMES only, never the filled values or source text
+    // privacy: history stores field names/counts only — never values or source text
     await Record("fill", outName, new JsonObject
     {
         ["template"] = tpl["name"]!.GetValue<string>(),
-        ["filled"] = values.Count, ["missing"] = missing.Length,
+        ["fields"] = report.Count, ["verified"] = nVerified, ["missing"] = missing.Count,
         ["confidence"] = mapped["confidence"]?.GetValue<int>() ?? 0
     });
     return Results.Json(new
     {
         fileBase64 = Convert.ToBase64String(outBytes), filename = outName,
-        filled = values, missing, confidence = mapped["confidence"]?.GetValue<int>() ?? 0
+        payload, verification = report, missing,
+        confidence = mapped["confidence"]?.GetValue<int>() ?? 0
+    });
+});
+
+// -------- fill-manual: render a payload directly, no AI (power users, integrations, tests) --------
+app.MapPost("/api/template/fill-manual", async (HttpContext ctx) =>
+{
+    if (RateLimited(ctx, 20)) return Err(429, "Too many requests — slow down a little.");
+    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+    var tid = body?["templateId"]?.GetValue<string>();
+    var payload = body?["payload"]?.AsObject();
+    if (tid is null || payload is null) return Err(400, "templateId and payload are required.");
+    payload["scalars"] ??= new JsonObject(); payload["collections"] ??= new JsonObject(); payload["conditionals"] ??= new JsonObject();
+    var tpl = await store.Get("df_templates", tid);
+    if (tpl is null) return Err(404, "Template not found — upload it again.");
+    var kind = tpl["kind"]!.GetValue<string>();
+    byte[] outBytes;
+    try
+    {
+        var raw = Convert.FromBase64String(tpl["fileBase64"]!.GetValue<string>());
+        outBytes = kind == "docx" ? Tpl.RenderDocx(raw, payload) : Tpl.RenderXlsx(raw, payload);
+    }
+    catch (AppError e) { return Err(e.Code, e.Message); }
+    catch (Exception ex) { return Err(500, "Filling failed: " + ex.Message); }
+    var outName = Path.GetFileNameWithoutExtension(tpl["name"]!.GetValue<string>()) + "-filled." + kind;
+    await Record("fill", outName, new JsonObject { ["template"] = tpl["name"]!.GetValue<string>(), ["mode"] = "manual" });
+    return Results.Json(new { fileBase64 = Convert.ToBase64String(outBytes), filename = outName });
+});
+
+// -------- batch: one template + a CSV = one document per row, zipped --------
+app.MapPost("/api/template/batch", async (HttpContext ctx) =>
+{
+    if (RateLimited(ctx, 4)) return Err(429, "Batch is limited to a few runs per minute.");
+    var body = await JsonNode.ParseAsync(ctx.Request.Body);
+    var tid = body?["templateId"]?.GetValue<string>();
+    var csvB64 = body?["csvBase64"]?.GetValue<string>();
+    if (tid is null || csvB64 is null) return Err(400, "templateId and csvBase64 are required.");
+    var tpl = await store.Get("df_templates", tid);
+    if (tpl is null) return Err(404, "Template not found — upload it again.");
+    var kind = tpl["kind"]!.GetValue<string>();
+    string csvText;
+    try { csvText = Encoding.UTF8.GetString(Convert.FromBase64String(csvB64)); }
+    catch { return Err(400, "csvBase64 is not valid base64."); }
+    var rows = Csv.Parse(csvText);
+    if (rows.Count < 2) return Err(422, "The CSV needs a header row plus at least one data row.");
+    if (rows.Count > 201) return Err(422, "Batch is capped at 200 rows in v2.");
+    var headers = rows[0];
+    var nameCol = Array.FindIndex(headers, h => h.Equals("filename", StringComparison.OrdinalIgnoreCase));
+
+    var raw = Convert.FromBase64String(tpl["fileBase64"]!.GetValue<string>());
+    var baseName = Path.GetFileNameWithoutExtension(tpl["name"]!.GetValue<string>());
+    using var zipMs = new MemoryStream();
+    int okCount = 0; var errors = new JsonArray();
+    using (var zip = new System.IO.Compression.ZipArchive(zipMs, System.IO.Compression.ZipArchiveMode.Create, true))
+        for (int i = 1; i < rows.Count; i++)
+        {
+            var payload = new JsonObject { ["scalars"] = new JsonObject(), ["collections"] = new JsonObject(), ["conditionals"] = new JsonObject() };
+            for (int c = 0; c < headers.Length && c < rows[i].Length; c++)
+                payload["scalars"]!.AsObject()[headers[c]] = rows[i][c];
+            try
+            {
+                var bytes = kind == "docx" ? Tpl.RenderDocx(raw, payload) : Tpl.RenderXlsx(raw, payload);
+                var fname = (nameCol >= 0 && nameCol < rows[i].Length && rows[i][nameCol].Length > 0
+                            ? Sanitize(rows[i][nameCol].Replace("/", "-"), 60) : $"{baseName}-{i:000}") + "." + kind;
+                var entry = zip.CreateEntry(fname);
+                using var es = entry.Open(); es.Write(bytes, 0, bytes.Length);
+                okCount++;
+            }
+            catch (Exception ex) { errors.Add(new JsonObject { ["row"] = i, ["error"] = ex.Message }); }
+        }
+    await Record("batch", $"{baseName} × {okCount}", new JsonObject
+    { ["template"] = tpl["name"]!.GetValue<string>(), ["rows"] = rows.Count - 1, ["generated"] = okCount, ["failed"] = errors.Count });
+    return Results.Json(new
+    {
+        zipBase64 = Convert.ToBase64String(zipMs.ToArray()),
+        filename = $"{baseName}-batch.zip", generated = okCount, failed = errors.Count, errors
     });
 });
 
@@ -323,8 +421,6 @@ app.MapGet("/api/history", async () =>
 app.Run();
 
 // ============================== plumbing ==============================
-class AppError(int code, string message) : Exception(message) { public int Code { get; } = code; }
-
 interface IStore
 {
     Task Upsert(string table, string id, JsonObject doc);
@@ -389,12 +485,47 @@ class SupabaseStore(string url, string key) : IStore
     public async Task Delete(string table, string id) => await Send(Req(HttpMethod.Delete, $"{table}?id=eq.{id}"));
 }
 
+static class Csv
+{
+    public static List<string[]> Parse(string text)
+    {
+        var rows = new List<string[]>(); var cur = new List<string>(); var sb = new StringBuilder(); bool q = false;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char ch = text[i];
+            if (q)
+            {
+                if (ch == '"' && i + 1 < text.Length && text[i + 1] == '"') { sb.Append('"'); i++; }
+                else if (ch == '"') q = false;
+                else sb.Append(ch);
+            }
+            else if (ch == '"') q = true;
+            else if (ch == ',') { cur.Add(sb.ToString()); sb.Clear(); }
+            else if (ch == '\n' || ch == '\r')
+            {
+                if (ch == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
+                cur.Add(sb.ToString()); sb.Clear();
+                if (cur.Count > 1 || cur[0].Length > 0) rows.Add(cur.ToArray());
+                cur = new List<string>();
+            }
+            else sb.Append(ch);
+        }
+        cur.Add(sb.ToString());
+        if (cur.Count > 1 || cur[0].Length > 0) rows.Add(cur.ToArray());
+        return rows;
+    }
+}
+
 static class Mock
 {
     public static readonly Dictionary<string, string> Responses = new()
     {
         ["fill"] = """
-        {"values":{"candidate_name":"Nadeesha Perera","job_title":"Senior Software Engineer","company":"Meridian Labs","salary":"LKR 480,000","start_date":"1 September 2026","manager":"R. Fernando"},"confidence":92,"missing":["probation_months"]}
+        {"payload":{"scalars":{"candidate_name":"Nadeesha Perera","job_title":"Senior Software Engineer","company":"Meridian Labs","salary":"480000","start_date":"2026-09-01","manager":"R. Fernando"},
+                    "collections":{"line_items":[{"description":"Discovery workshop","qty":"1","amount":"85000"},{"description":"Build sprint","qty":"4","amount":"320000"}]},
+                    "conditionals":{"discount_applies":true}},
+         "evidence":{"candidate_name":"going with Nadeesha Perera","salary":"salary agreed at 480k"},
+         "confidence":92,"missing":["probation_months"]}
         """,
         ["sheet"] = """
         {"filename":"bakery_cash_flow.xlsx","summary":"12-month bakery cash flow with assumptions.",

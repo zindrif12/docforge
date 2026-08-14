@@ -1,6 +1,29 @@
-# DocForge — the AI document workshop
+# DocForge v2 — the AI document workshop
 
-One app, four forges. Real Office files, zero dependencies.
+One app, four forges — now with a real template engine, batch generation, and verification.
+
+## v2 template language
+```
+{{client_name}}                     scalar field
+{{amount | currency:LKR}}           filters: currency:CODE, number, round:n, date:long|short, upper, lower
+{{#each line_items}} ... {{/each}}  loops — repeat table rows (docx/xlsx) or paragraphs per item
+{{#if discount_applies}} ... {{/if}} conditionals — keep or drop whole blocks
+```
+Loops expand Word table rows and Excel rows (cell references and per-row formulas are renumbered
+automatically — `=B2*C2` in the template row becomes `=B3*C3`, `=B4*C4`, … in the clones; totals
+below a loop should use column ranges like `=SUM(D:D)`). Nested loops are rejected with a clear
+error in v2.
+
+## Batch
+Select a template, drop a CSV: headers map to scalar fields, one document per row, optional
+`filename` column names each file, capped at 200 rows, delivered as a zip. No AI involved —
+deterministic and fast.
+
+## Verification
+Every AI fill returns a per-field report: **verified** (the value appears in your source),
+**derived** (the AI transformed something that does appear — the supporting quote is included),
+**unverified** (take a look), or **missing** (flagged, never invented). Nothing goes to a client
+on the AI's word alone.
 
 - **Fill** — upload your own `.docx`/`.xlsx` template containing `{{placeholders}}`, paste any messy source
   (email threads, meeting notes, CRM text) and get the finished document back with your formatting intact.
@@ -34,8 +57,13 @@ GEMINI_API_KEY=... dotnet run # real AI, file-based storage
 4. Smoke test `/api/health` — expect `"provider":"gemini","store":"supabase"`.
 
 ## Tests
-`tests/suite.sh` — 25 checks. Every generated file is independently opened and verified by
+`tests/suite.sh` — 35 checks. Every generated file is independently opened and verified by
 openpyxl / python-docx / python-pptx, including a split-run placeholder fill round-trip.
 
+## API additions in v2
+`POST /api/template/fill-manual` — render a JSON payload directly, no AI (integrations, pipelines).
+`POST /api/template/batch` — templateId + csvBase64 → zip.
+`GET /api/health` — now reports `version: 2` and the engine feature list.
+
 ## Roadmap
-PDF export · scheduled recurring reports (ReportRun) · pptx templates for Fill · bulk fill from CSV.
+Scheduled recurring runs · data-source connectors (SQL / OData / Sheets) · PDF export · pptx templates · nested loops.
